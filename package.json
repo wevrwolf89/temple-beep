@@ -1,16 +1,20 @@
-﻿{
+{
   "name": "temple-beep",
   "version": "1.0.0",
   "description": "Temple BEEP Slack bot (Socket Mode)",
   "main": "app.js",
   "type": "commonjs",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node app.js",
     "dev": "node app.js"
   },
   "dependencies": {
-    "@slack/bolt": "^3.18.0",
-    "dotenv": "^16.4.5"
+    "@slack/bolt": "^3.22.0",
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "serverless-http": "^4.0.0"
   }
 }
