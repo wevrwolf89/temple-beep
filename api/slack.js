@@ -7,8 +7,9 @@ const receiver = new ExpressReceiver({
   endpoints: { events: "/api/slack" },
 });
 
-// simple GET so a browser request shows something sane
+// Health checks: GET/HEAD -> 200
 receiver.router.get("/api/slack", (_req, res) => res.status(200).send("ok"));
+receiver.router.head("/api/slack", (_req, res) => res.status(200).end());
 
 /* ---------- Bolt App ---------- */
 const app = new App({
@@ -42,12 +43,12 @@ const ALLOWED_CHANNELS = new Set(
   (process.env.ALLOWED_CHANNEL_IDS || "")
     .split(",").map(s => s.trim()).filter(Boolean)
 );
+const FALLBACK_CHANNEL_ID = process.env.INCIDENTS_CHANNEL_ID || "";
 
 /* ---------- /beep → open modal ---------- */
 app.command("/beep", async ({ ack, body, client, logger }) => {
   await ack();
 
-  // optional: restrict usage to allowlist
   if (ALLOWED_CHANNELS.size && !ALLOWED_CHANNELS.has(body.channel_id)) {
     try {
       await client.chat.postEphemeral({
@@ -65,7 +66,7 @@ app.command("/beep", async ({ ack, body, client, logger }) => {
       view: {
         type: "modal",
         callback_id: "beep_post",
-        private_metadata: body.channel_id, // post back where the command was used
+        private_metadata: body.channel_id,
         title:  { type: "plain_text", text: "BEEP" },
         submit: { type: "plain_text", text: "Post" },
         blocks: [
@@ -97,14 +98,7 @@ app.view("beep_post", async ({ ack, view, body, client, logger }) => {
   const col = v.col.col_a.selected_option.value;
   const typ = v.typ.typ_a.selected_option.value;
 
-  // 1) Prefer the channel that opened the modal
-  let channelId = view.private_metadata;
-
-  // 2) Fallback to env (make sure bot is invited there)
-  if (!channelId && process.env.INCIDENTS_CHANNEL_ID) {
-    channelId = process.env.INCIDENTS_CHANNEL_ID;
-  }
-
+  let channelId = view.private_metadata || FALLBACK_CHANNEL_ID;
   try {
     if (!channelId) throw new Error("channel_lookup_failed");
 
@@ -133,7 +127,6 @@ app.view("beep_post", async ({ ack, view, body, client, logger }) => {
     });
   } catch (e) {
     logger.error("Error posting BEEP:", e);
-    // fall back with a DM to the user with tips
     try {
       const dm = await client.conversations.open({ users: body.user.id });
       await client.chat.postMessage({
@@ -172,18 +165,11 @@ app.command("/form", async ({ ack, body, client }) => {
   });
 });
 
-/* ---------- OPTIONAL: debug which slash command Slack is sending ----------
-   Set SLACK_DEBUG=1 in your env to enable this. Remove or disable after testing. */
-if (process.env.SLACK_DEBUG === "1") {
-  app.command(/.*/, async ({ ack, body, client }) => {
-    await ack();
-    await client.chat.postEphemeral({
-      channel: body.channel_id,
-      user: body.user_id,
-      text: `Debug: received command \`${body.command}\``
-    });
-  });
-}
+/* ---------- Catch-alls to stop 3s warnings ---------- */
+// If Event Subscriptions are ON but you don't use them, this will ack them.
+app.event(/.*/, async ({ ack }) => { await ack(); });
+// Ack any unhandled interactive actions (buttons/selects) just in case.
+app.action(/.*/, async ({ ack }) => { await ack(); });
 
 /* ---------- Vercel export ---------- */
 export default function handler(req, res) {
