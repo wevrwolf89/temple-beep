@@ -19,7 +19,7 @@ const app = new App({
   logLevel: 'info',
 });
 
-// ---- Example command (/form) – keep your handlers here ----
+// ---- /form command (unchanged) ----
 app.command('/form', async ({ ack, body, client }) => {
   await ack();
 
@@ -47,6 +47,29 @@ app.command('/form', async ({ ack, body, client }) => {
         ]
       : undefined,
   });
+});
+
+// ---- NEW: /beep command (simple health/status ping) ----
+app.command('/beep', async ({ ack, command, respond, client }) => {
+  await ack(); // must ack within 3s
+
+  // Ephemeral reply to the user who ran /beep
+  await respond({
+    response_type: 'ephemeral',
+    text: `Temple BEEP is alive 🚀 (user: <@${command.user_id}>, channel: <#${command.channel_id}>)`,
+  });
+
+  // Optional: also post to a dedicated incidents channel, if configured
+  if (process.env.INCIDENTS_CHANNEL_ID) {
+    try {
+      await client.chat.postMessage({
+        channel: process.env.INCIDENTS_CHANNEL_ID,
+        text: `✅ /beep check by <@${command.user_id}> from <#${command.channel_id}>`,
+      });
+    } catch (err) {
+      console.error('Failed to post to incidents channel:', err);
+    }
+  }
 });
 
 // 4) Export a Vercel-compatible handler that forwards the request to the Express app
